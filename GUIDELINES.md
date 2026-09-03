@@ -304,25 +304,42 @@ npx vercel logs     # runtime logs when production misbehaves
 After any deploy, open `/api/health` on the production URL. If it says `db: down`,
 `DATABASE_URL` is missing in Vercel — check `npx vercel env ls`.
 
-### 7.1 One-time owner setup (browser, ~3 minutes)
+### 7.1 Owner setup — already done
 
-These three need a human in the Vercel dashboard. **Do them before the clock starts.**
+- ✅ **Neon provisioned** (Free plan) and connected to Production, Preview, and
+  Development. `DATABASE_URL` and the `PG*`/`POSTGRES_*` vars are set in Vercel.
+- ✅ **Schema pushed and seeded** on Neon.
+- ✅ **GitHub connected** — pushes to `main` deploy to production, PRs get previews.
 
-1. **Provision Neon** — accept the marketplace terms once:
-   <https://vercel.com/gen-x5/~/integrations/accept-terms/neon?source=cli>
-   Then run `npx vercel integration add neon --plan free_v2` and `npm run env:pull`.
+Nothing to redo. To confirm at any point:
 
-2. **Connect GitHub** for auto-deploy — grant the Vercel GitHub App access to
-   `Nasrullaunais/mini-hackathon`, then `npx vercel git connect`:
-   <https://vercel.com/gen-x5/mini-hackathon/settings/git>
+```bash
+npx vercel env ls
+npx vercel curl https://mini-hackathon-gen-x5.vercel.app/api/health
+# -> {"ok":true,"db":"up"}
+```
 
-3. **Turn off Deployment Protection** — production is currently behind Vercel SSO, so
-   anyone without a GenX team account gets a login wall. **Your demo video and the
-   judges will hit that wall.** Set Vercel Authentication to Disabled:
-   <https://vercel.com/gen-x5/mini-hackathon/settings/deployment-protection>
+### 7.2 Known limitation — the production URL is behind Vercel SSO
 
-Verify all three: `curl https://mini-hackathon-gen-x5.vercel.app/api/health` should
-return `{"ok":true,"db":"up"}` from a logged-out machine or an incognito window.
+Production sits behind Vercel Authentication and **we cannot turn it off** — that
+setting requires a Pro plan, and this account has no personal Hobby scope to fall
+back to. Anyone hitting the URL without a GenX team account gets a login page.
+
+What this does and does not break:
+
+- **Recording the demo video: unaffected.** Whoever records is signed in to Vercel,
+  so the app loads normally. The video is the deliverable — record the deployed URL
+  as planned.
+- **A judge clicking the link: blocked.** They would land on a Vercel login page.
+
+If a publicly clickable URL is required, decide **before** the event, not during:
+
+1. Add the judges as members of the GenX Vercel team (they can then sign in), or
+2. Start Vercel's Pro trial and set Vercel Authentication to Disabled, or
+3. Accept it and lead with the video plus a `git clone` + `npm run dev` fallback.
+
+Do not spend hackathon time on this. It is a 10-minute problem before the clock
+starts and a 60-minute problem at 3:45.
 
 ---
 
@@ -344,7 +361,8 @@ small app demos far better than a broken ambitious one.
 
 ## 9. The demo video (2 minutes)
 
-Record the **deployed Vercel URL**, not localhost. Write the script before you record.
+Record the **deployed Vercel URL**, not localhost. Make sure the browser you record
+in is signed in to Vercel (see §7.2). Write the script before you record.
 
 A structure that works:
 
