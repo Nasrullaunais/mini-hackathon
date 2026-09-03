@@ -3,16 +3,22 @@
 Read `GUIDELINES.md` first — it is the source of truth for this repo. Highlights that
 AI assistants get wrong most often:
 
-## shadcn is the Base UI style, NOT Radix
+## shadcn is the Radix style (`new-york`)
 
-`components.json` sets `"style": "base-nova"`. Components import from
-`@base-ui/react/*`, not `@radix-ui/*`.
+`components.json` sets `"style": "new-york"`. Components import from the unified
+`radix-ui` package, not from per-primitive `@radix-ui/react-*` packages:
 
-- **No `<Form>` component exists.** Use `Field`, `FieldLabel`, `FieldGroup`,
+```tsx
+import { Dialog as DialogPrimitive } from "radix-ui"   // right
+import * as DialogPrimitive from "@radix-ui/react-dialog"  // wrong, not installed
+```
+
+- **Composition uses `asChild`**, not Base UI's `render`:
+  `<Button asChild><Link href="/x">Go</Link></Button>`
+- **We do not use `<Form>` / react-hook-form.** Forms are Server Actions +
+  `useActionState`; render fields with `Field`, `FieldLabel`, `FieldGroup`,
   `FieldError` from `@/components/ui/field`.
-- **No `asChild` prop.** Base UI uses `render`:
-  `<Button render={<Link href="/x" />}>Go</Button>`
-- Do not `npm install @radix-ui/*`. Do not hand-write components from memory —
+- Do not `npm install @base-ui/react`. Do not hand-write components from memory —
   run `npx shadcn@latest add <name>`.
 
 ## Data access
@@ -70,3 +76,13 @@ npm run verify     # typecheck + lint + build
 All three must pass. This is a 4-hour hackathon: prefer the smallest change that works,
 match the existing patterns in `src/app/items/` and `src/lib/actions/items.ts`, and do
 not introduce new libraries or abstractions without being asked.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

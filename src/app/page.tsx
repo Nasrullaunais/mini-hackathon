@@ -13,9 +13,11 @@ export default function Home() {
         </p>
       </div>
       <div className="flex gap-3">
-        <Button render={<Link href="/items" />}>Reference CRUD</Button>
-        <Button variant="outline" render={<Link href="/api/health" />}>
-          Health check
+        <Button asChild>
+          <Link href="/items">Reference CRUD</Link>
+        </Button>
+        <Button variant="outline" asChild>
+          <Link href="/api/health">Health check</Link>
         </Button>
       </div>
     </main>

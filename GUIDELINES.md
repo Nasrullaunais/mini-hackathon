@@ -47,29 +47,32 @@ anyone else's work with a bad migration.
 | Layer | Choice | Notes |
 |---|---|---|
 | Framework | Next.js 16 (App Router, Turbopack) | Client **and** server in one project |
-| UI | shadcn/ui (`base-nova` style, Base UI) | Components live in `src/components/ui/` |
+| UI | shadcn/ui (`new-york` style, Radix) | Components live in `src/components/ui/` |
 | Styling | Tailwind CSS v4 | No config file — theme is in `src/app/globals.css` |
 | DB | Postgres | Docker locally, Neon in production |
 | ORM | Drizzle | Schema in `src/db/schema.ts` |
 | Validation | Zod | Every input crossing the network gets validated |
 | Deploy | Vercel | Auto-deploys on push |
 
-### shadcn gotcha — read this
+### shadcn notes — read this
 
-This project uses shadcn's **Base UI** style, not the older Radix one. Two consequences:
+This project uses shadcn's default **Radix** style (`new-york`), so almost every
+tutorial and AI-generated snippet you find will just work. Two things to know:
 
-- There is **no `<Form>` component.** Use `<Field>` from `@/components/ui/field`.
-- There is **no `asChild` prop.** Use `render` instead:
+- **Primitives come from the unified `radix-ui` package**, not the old
+  per-component ones. Older snippets import `@radix-ui/react-dialog`; ours import
+  `{ Dialog as DialogPrimitive } from "radix-ui"`. Only the generated files in
+  `src/components/ui/` touch primitives directly, so you will rarely care — but if
+  you copy a component in from elsewhere, fix the import rather than installing
+  `@radix-ui/react-*`.
+- **We do not use `<Form>` or react-hook-form.** Forms here are Server Actions plus
+  `useActionState`, with `<Field>` from `@/components/ui/field` for layout and
+  errors. See `src/components/items/item-form.tsx`. `asChild` works as normal:
   ```tsx
-  // WRONG (Radix style, will not compile)
   <Button asChild><Link href="/x">Go</Link></Button>
-
-  // RIGHT (Base UI style)
-  <Button render={<Link href="/x" />}>Go</Button>
   ```
 
-Most AI assistants and most blog posts will give you the Radix version. If a snippet
-does not compile, this is why.
+Add components with `npx shadcn@latest add <name>` — never hand-write one.
 
 ---
 
