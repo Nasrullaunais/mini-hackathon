@@ -1,0 +1,294 @@
+# Hackathon Guidelines
+
+**4 hours. 4 people. One CRUD app. A 2-minute demo video at the end.**
+
+Everything below exists so nobody spends hackathon time on setup, merge conflicts, or
+"it works on my machine". Read this once, fully, before you write code.
+
+---
+
+## 1. Setup (do this BEFORE the clock starts)
+
+```bash
+git clone https://github.com/Nasrullaunais/mini-hackathon.git
+cd mini-hackathon
+npm install
+cp .env.example .env.local     # local Docker DB by default
+npm run db:up                  # starts Postgres on port 5442
+npm run db:push                # creates tables from src/db/schema.ts
+npm run db:seed                # optional sample rows
+npm run dev
+```
+
+Open <http://localhost:3000>. You should see the landing page.
+Open <http://localhost:3000/items> — that is the **reference CRUD**. Copy its shape.
+Open <http://localhost:3000/api/health> — must return `{"ok":true,"db":"up"}`.
+
+If health is not ok, your database is not reachable. Fix that before anything else.
+
+### Using the shared Neon database instead
+
+Production runs on Neon. To point your local app at it:
+
+```bash
+npx vercel login          # once
+npx vercel link --yes     # once
+npm run env:pull          # writes DATABASE_URL into .env.local
+```
+
+**Which should you use?** Local Docker while building features. Neon when you need to
+check something against real deployed data. Local is faster and you cannot break
+anyone else's work with a bad migration.
+
+---
+
+## 2. The stack, and what each piece is for
+
+| Layer | Choice | Notes |
+|---|---|---|
+| Framework | Next.js 16 (App Router, Turbopack) | Client **and** server in one project |
+| UI | shadcn/ui (`base-nova` style, Base UI) | Components live in `src/components/ui/` |
+| Styling | Tailwind CSS v4 | No config file — theme is in `src/app/globals.css` |
+| DB | Postgres | Docker locally, Neon in production |
+| ORM | Drizzle | Schema in `src/db/schema.ts` |
+| Validation | Zod | Every input crossing the network gets validated |
+| Deploy | Vercel | Auto-deploys on push |
+
+### shadcn gotcha — read this
+
+This project uses shadcn's **Base UI** style, not the older Radix one. Two consequences:
+
+- There is **no `<Form>` component.** Use `<Field>` from `@/components/ui/field`.
+- There is **no `asChild` prop.** Use `render` instead:
+  ```tsx
+  // WRONG (Radix style, will not compile)
+  <Button asChild><Link href="/x">Go</Link></Button>
+
+  // RIGHT (Base UI style)
+  <Button render={<Link href="/x" />}>Go</Button>
+  ```
+
+Most AI assistants and most blog posts will give you the Radix version. If a snippet
+does not compile, this is why.
+
+---
+
+## 3. Project structure — where things go
+
+```
+src/
+  app/
+    page.tsx                 landing
+    layout.tsx               root layout + <Toaster />
+    items/page.tsx           REFERENCE: server component that reads the DB
+    api/health/route.ts      deployment smoke test
+    api/items/route.ts       REFERENCE: REST handlers (only if you need REST)
+  components/
+    ui/                      shadcn components — DO NOT hand-edit, re-add instead
+    items/                   REFERENCE: feature components
+  db/
+    schema.ts                ALL tables. One owner. See rule 5.
+    index.ts                 db client — never instantiate postgres() anywhere else
+    seed.ts                  sample data
+  lib/
+    actions/items.ts         REFERENCE: server actions
+    utils.ts                 cn() helper
+```
+
+**Rule: one folder per feature** under `src/components/`, `src/app/`, and
+`src/lib/actions/`. If you own "orders", you touch `components/orders/`,
+`app/orders/`, `lib/actions/orders.ts`. Nobody else touches those. This is how four
+people avoid merge conflicts.
+
+---
+
+## 4. How to write a feature (the only pattern you need)
+
+Default to **Server Components + Server Actions**. Do not build REST endpoints and
+then fetch them from your own pages — that is twice the code and twice the bugs.
+
+**Read data** — server component, `async`, query directly:
+
+```tsx
+// src/app/orders/page.tsx
+export const dynamic = "force-dynamic";
+
+export default async function OrdersPage() {
+  const rows = await db.select().from(orders).orderBy(desc(orders.createdAt));
+  return <OrderList orders={rows} />;
+}
+```
+
+**Write data** — server action: validate, write, revalidate, return a plain object:
+
+```ts
+// src/lib/actions/orders.ts
+"use server";
+
+export async function createOrder(_prev: ActionState, formData: FormData) {
+  const parsed = OrderInput.safeParse({ name: formData.get("name") });
+  if (!parsed.success) return { error: parsed.error.issues[0].message };
+
+  await db.insert(orders).values(parsed.data);
+  revalidatePath("/orders");
+  return { success: true };
+}
+```
+
+**Wire the form** — client component with `useActionState`:
+
+```tsx
+"use client";
+const [state, formAction, isPending] = useActionState(createOrder, {});
+```
+
+Read `src/lib/actions/items.ts`, `src/app/items/page.tsx`, and
+`src/components/items/` end to end once. Then copy them. That is the fastest path.
+
+**Only write a `route.ts`** when something outside your own pages calls it — a
+webhook, an external client, a cron.
+
+### Non-negotiables
+
+- `"use client"` only on components that need state, effects, or event handlers.
+  Push it as far down the tree as possible.
+- Server actions **return** `{ error }`, they do not throw at the user.
+- Validate every `FormData` and every JSON body with Zod. No exceptions.
+- Never import `src/db/*` into a client component. It will leak your connection
+  string into the browser bundle or fail the build.
+- Never put secrets in a `NEXT_PUBLIC_*` variable.
+
+---
+
+## 5. Database rules
+
+**One person owns `src/db/schema.ts`.** Decide who in the first 15 minutes. Everyone
+else asks that person for a column. Two people editing the schema concurrently is the
+single most likely way to lose 30 minutes today.
+
+Change the schema:
+
+```bash
+# edit src/db/schema.ts, then:
+npm run db:push        # syncs your LOCAL db, no migration files
+```
+
+We use `db:push`, **not** generated migrations. It is the right trade-off for four
+hours. It means the schema is whatever `schema.ts` says.
+
+```bash
+npm run db:studio      # browse data in a GUI
+npm run db:reset       # nuke local db and start clean
+npm run db:seed        # reload sample rows
+```
+
+**Before the demo**, the schema owner runs `db:push` once against Neon so production
+matches. Pull the Neon URL first (`npm run env:pull`), push, then switch back to local.
+
+Conventions: `snake_case` column names in the DB, `camelCase` in TypeScript (Drizzle
+maps them). Every table gets `id` (uuid), `createdAt`, `updatedAt`.
+
+---
+
+## 6. Git workflow
+
+`main` is always deployable. Never push broken code to `main`.
+
+```bash
+git checkout -b feat/orders
+# work
+npm run typecheck && npm run build     # BOTH must pass before you push
+git add -A && git commit -m "feat: order list and create form"
+git push -u origin feat/orders
+```
+
+Open a PR. Vercel comments a **preview URL** on it — click it, check your feature
+actually works deployed. Get one teammate to merge it.
+
+- Small commits, push often. A branch that lives 3 hours will conflict.
+- Merge to `main` at least every 45 minutes. Do not save it all for the end.
+- If you hit a conflict in `src/db/schema.ts`, stop and talk to the schema owner.
+- Do not commit `.env.local`. It is gitignored — keep it that way.
+
+---
+
+## 7. Deployment
+
+Pushing to `main` deploys to production automatically. That is the whole workflow.
+
+```bash
+npm run deploy      # manual production deploy, if you need it
+npx vercel logs     # runtime logs when production misbehaves
+```
+
+After the first deploy, open `/api/health` on the production URL. If it says
+`db: down`, `DATABASE_URL` is missing in Vercel — check `npx vercel env ls`.
+
+---
+
+## 8. The 4-hour plan
+
+| Time | What |
+|---|---|
+| 0:00–0:15 | Pick the topic. Agree the data model on paper. Assign the schema owner. Split into 4 feature slices with **no overlapping folders**. |
+| 0:15–0:30 | Schema owner writes `schema.ts` and pushes it. Everyone else scaffolds their route and stubs their UI. |
+| 0:30–2:30 | Build. Merge to `main` every 45 min. |
+| 2:30–3:00 | **Feature freeze.** Only bug fixes after this. Deploy to production and test the live URL. |
+| 3:00–3:30 | Polish: empty states, loading states, error toasts, a title that is not "Create Next App". Seed realistic-looking demo data. |
+| 3:30–4:00 | Record the video. |
+
+**Feature freeze at 2:30 is the most important line in this document.** A working
+small app demos far better than a broken ambitious one.
+
+---
+
+## 9. The demo video (2 minutes)
+
+Record the **deployed Vercel URL**, not localhost. Write the script before you record.
+
+A structure that works:
+
+- **0:00–0:15** — What the app is and who it is for. One sentence.
+- **0:15–1:30** — The core flow, done live: create something, see it in the list,
+  edit it, delete it. Move slowly and narrate what you are clicking.
+- **1:30–1:50** — One thing you are proud of. Anything real.
+- **1:50–2:00** — Stack in one line, and the live URL on screen.
+
+Practical: seed good demo data first (no "asdf" rows), close every other browser tab,
+hide bookmarks, use an incognito window, and do one dry run before the real take.
+Check your audio on a 10-second test clip — bad audio ruins more demo videos than
+bad features do.
+
+---
+
+## 10. Commands
+
+```bash
+npm run dev          # dev server
+npm run build        # production build — must pass before pushing
+npm run typecheck    # tsc --noEmit
+npm run lint         # eslint
+
+npm run db:up        # start local Postgres (port 5442)
+npm run db:down      # stop it
+npm run db:reset     # wipe and restart
+npm run db:push      # apply schema.ts to the database
+npm run db:studio    # data browser
+npm run db:seed      # load sample rows
+
+npm run env:pull     # pull env vars from Vercel into .env.local
+npm run deploy       # deploy to production
+
+npx shadcn@latest add <component>    # add a UI component
+```
+
+---
+
+## 11. When you are stuck
+
+1. `/api/health` — is the DB up?
+2. Is the failing component a client component importing something server-only?
+3. `npm run typecheck` — the error is usually more precise than the browser's.
+4. `npm run db:studio` — is the data actually what you think it is?
+5. Still stuck after 10 minutes? **Ask the team.** Do not burn 40 minutes alone.
+   In a 4-hour hackathon, 10 minutes is 4% of your budget.
