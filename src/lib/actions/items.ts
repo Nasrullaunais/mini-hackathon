@@ -2,77 +2,83 @@
 
 import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
-import { z } from "zod";
 import { db } from "@/db";
 import { items } from "@/db/schema";
+import {
+  itemFormSchema,
+  itemIdSchema,
+  toggleItemSchema,
+} from "@/lib/validations/items";
+import {
+  actionError,
+  actionSuccess,
+  parseForm,
+  type ActionState,
+} from "@/lib/form";
 
 /**
- * REFERENCE CRUD — copy this file's shape for your own entity.
- * Pattern: validate with zod -> hit the db -> revalidatePath -> return a plain object.
- * Never throw raw errors at the form; return { error } so the UI can show it.
+ * REFERENCE CRUD -- copy this shape for your own entity.
+ *
+ * Every action: validate -> write -> revalidatePath -> return an ActionState.
+ * Never throw at the UI; return actionError() so the form can render it.
  */
-
-export type ActionState = { error?: string; success?: boolean };
-
-const ItemInput = z.object({
-  title: z.string().trim().min(1, "Title is required").max(200),
-  description: z.string().trim().max(2000).optional().or(z.literal("")),
-});
 
 export async function createItem(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const parsed = ItemInput.safeParse({
-    title: formData.get("title"),
-    description: formData.get("description"),
-  });
+  const parsed = parseForm(itemFormSchema, formData);
+  if (!parsed.ok) return parsed.state;
 
-  if (!parsed.success) {
-    return { error: parsed.error.issues[0].message };
-  }
-
-  await db.insert(items).values({
-    title: parsed.data.title,
-    description: parsed.data.description || null,
-  });
+  await db.insert(items).values(parsed.data);
 
   revalidatePath("/items");
-  return { success: true };
+  return actionSuccess(undefined, "Item created");
 }
 
 export async function updateItem(
   id: string,
-  data: { title: string; description?: string | null },
+  values: unknown,
 ): Promise<ActionState> {
-  const parsed = ItemInput.safeParse(data);
-  if (!parsed.success) return { error: parsed.error.issues[0].message };
+  const parsedId = itemIdSchema.safeParse(id);
+  if (!parsedId.success) return actionError("Not a valid item id");
+
+  const parsed = itemFormSchema.safeParse(values);
+  if (!parsed.success) {
+    return actionError(parsed.error.issues[0].message);
+  }
 
   await db
     .update(items)
-    .set({
-      title: parsed.data.title,
-      description: parsed.data.description || null,
-      updatedAt: new Date(),
-    })
-    .where(eq(items.id, id));
+    .set({ ...parsed.data, updatedAt: new Date() })
+    .where(eq(items.id, parsedId.data));
 
   revalidatePath("/items");
-  return { success: true };
+  return actionSuccess(undefined, "Item updated");
 }
 
-export async function toggleItem(id: string, done: boolean): Promise<ActionState> {
+export async function toggleItem(
+  id: string,
+  done: boolean,
+): Promise<ActionState> {
+  const parsed = toggleItemSchema.safeParse({ id, done });
+  if (!parsed.success) return actionError(parsed.error.issues[0].message);
+
   await db
     .update(items)
-    .set({ done, updatedAt: new Date() })
-    .where(eq(items.id, id));
+    .set({ done: parsed.data.done, updatedAt: new Date() })
+    .where(eq(items.id, parsed.data.id));
 
   revalidatePath("/items");
-  return { success: true };
+  return actionSuccess();
 }
 
 export async function deleteItem(id: string): Promise<ActionState> {
-  await db.delete(items).where(eq(items.id, id));
+  const parsed = itemIdSchema.safeParse(id);
+  if (!parsed.success) return actionError("Not a valid item id");
+
+  await db.delete(items).where(eq(items.id, parsed.data));
+
   revalidatePath("/items");
-  return { success: true };
+  return actionSuccess(undefined, "Item deleted");
 }

@@ -2,11 +2,12 @@ import { desc } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { items } from "@/db/schema";
+import { itemFormSchema } from "@/lib/validations/items";
 
 /**
- * REST example. Only needed if something outside the app calls us
- * (a fetch from a client lib, a webhook, a mobile client).
- * For normal page forms prefer Server Actions -- see src/lib/actions/items.ts.
+ * REST example. Only needed when something OUTSIDE this app calls us --
+ * a webhook, a mobile client, a cron. For page forms use Server Actions
+ * instead (src/lib/actions/items.ts).
  */
 
 export async function GET() {
@@ -14,18 +15,13 @@ export async function GET() {
   return Response.json(rows);
 }
 
-const CreateItem = z.object({
-  title: z.string().trim().min(1).max(200),
-  description: z.string().trim().max(2000).nullish(),
-});
-
 export async function POST(request: Request) {
-  const body = await request.json().catch(() => null);
-  const parsed = CreateItem.safeParse(body);
+  const body: unknown = await request.json().catch(() => null);
+  const parsed = itemFormSchema.safeParse(body);
 
   if (!parsed.success) {
     return Response.json(
-      { error: parsed.error.issues[0].message },
+      { error: "Validation failed", details: z.flattenError(parsed.error) },
       { status: 400 },
     );
   }

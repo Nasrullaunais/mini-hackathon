@@ -22,6 +22,8 @@ npm run db:seed    # sample data
 npm run dev
 ```
 
+Before pushing: `npm run verify` (typecheck + lint + build).
+
 - App — <http://localhost:3000>
 - Reference CRUD — <http://localhost:3000/items>
 - Health check — <http://localhost:3000/api/health>
@@ -31,7 +33,9 @@ npm run dev
 | Path | What |
 |---|---|
 | `src/db/schema.ts` | All tables. Single owner — see GUIDELINES §5. |
-| `src/db/index.ts` | Drizzle client. Never instantiate Postgres elsewhere. |
+| `src/db/index.ts` | Drizzle client (`server-only`). Import `{ db } from "@/db"`. |
+| `src/lib/validations/` | Zod schemas derived from the tables, one file per entity. |
+| `src/lib/form.ts` | `ActionState` + `parseForm()` used by every server action. |
 | `src/lib/actions/` | Server actions, one file per feature. |
 | `src/app/<feature>/` | Routes. |
 | `src/components/<feature>/` | Feature components. |

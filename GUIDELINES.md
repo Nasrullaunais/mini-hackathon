@@ -88,10 +88,13 @@ src/
     items/                   REFERENCE: feature components
   db/
     schema.ts                ALL tables. One owner. See rule 5.
-    index.ts                 db client — never instantiate postgres() anywhere else
+    index.ts                 server-only db entry — import { db } from "@/db"
+    client.ts                raw connection. Node scripts only, never app code.
     seed.ts                  sample data
   lib/
+    validations/items.ts     REFERENCE: Zod schemas derived from the table
     actions/items.ts         REFERENCE: server actions
+    form.ts                  ActionState + parseForm() helper
     utils.ts                 cn() helper
 ```
 
@@ -119,19 +122,23 @@ export default async function OrdersPage() {
 }
 ```
 
-**Write data** — server action: validate, write, revalidate, return a plain object:
+**Write data** — server action: validate, write, revalidate, return an `ActionState`:
 
 ```ts
 // src/lib/actions/orders.ts
 "use server";
 
-export async function createOrder(_prev: ActionState, formData: FormData) {
-  const parsed = OrderInput.safeParse({ name: formData.get("name") });
-  if (!parsed.success) return { error: parsed.error.issues[0].message };
+export async function createOrder(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const parsed = parseForm(orderFormSchema, formData);
+  if (!parsed.ok) return parsed.state;
 
   await db.insert(orders).values(parsed.data);
+
   revalidatePath("/orders");
-  return { success: true };
+  return actionSuccess(undefined, "Order created");
 }
 ```
 
@@ -139,7 +146,7 @@ export async function createOrder(_prev: ActionState, formData: FormData) {
 
 ```tsx
 "use client";
-const [state, formAction, isPending] = useActionState(createOrder, {});
+const [state, formAction, isPending] = useActionState(createOrder, idleState);
 ```
 
 Read `src/lib/actions/items.ts`, `src/app/items/page.tsx`, and
@@ -152,11 +159,80 @@ webhook, an external client, a cron.
 
 - `"use client"` only on components that need state, effects, or event handlers.
   Push it as far down the tree as possible.
-- Server actions **return** `{ error }`, they do not throw at the user.
+- Server actions **return** an `ActionState`, they do not throw at the user.
 - Validate every `FormData` and every JSON body with Zod. No exceptions.
-- Never import `src/db/*` into a client component. It will leak your connection
-  string into the browser bundle or fail the build.
+- Never import `@/db` into a client component. It is guarded with `server-only`,
+  so this is a build error, not a silent leak.
 - Never put secrets in a `NEXT_PUBLIC_*` variable.
+
+---
+
+## 4b. Validation (Zod)
+
+Schemas live in `src/lib/validations/<entity>.ts` and are **derived from the Drizzle
+table** with `drizzle-zod`, so a column rename becomes a type error instead of a
+runtime surprise. Never hand-write a schema that duplicates the table.
+
+```ts
+// src/lib/validations/items.ts
+export const itemFormSchema = createInsertSchema(items, {
+  title: (schema) => schema.trim().min(1, "Title is required").max(200, "..."),
+})
+  .pick({ title: true })
+  .extend({ description: optionalText(2000, "Description") });
+```
+
+Rules:
+
+- **One schema per entity, reused everywhere** — the Server Action and the route
+  handler import the *same* schema. Two copies will drift within the hour.
+- **Error messages are user-facing.** `"Title is required"`, not `"Invalid input"`.
+- **`.pick()` what the form owns.** Never let a client set `id`, `createdAt`, or
+  `done` through a create form — Zod strips unknown keys, and that is the point.
+
+In a Server Action, use the `parseForm` helper — it returns a discriminated union so
+you cannot forget the failure branch:
+
+```ts
+const parsed = parseForm(itemFormSchema, formData);
+if (!parsed.ok) return parsed.state;   // field errors, already formatted
+await db.insert(items).values(parsed.data);
+return actionSuccess(undefined, "Item created");
+```
+
+Every action returns `ActionState`:
+
+```ts
+{ status: "idle" | "success" | "error", message?, fieldErrors?, data? }
+```
+
+The form renders `state.fieldErrors?.<name>` under the matching input via
+`<FieldError>`, and toasts `state.message`. See `src/components/items/item-form.tsx`.
+
+---
+
+## 4c. Lint rules (and why they exist)
+
+`npm run lint` is tuned to catch the mistakes AI assistants actually make. Errors are
+things that will bite you during the demo; warnings are smells.
+
+| Rule | Why it is here |
+|---|---|
+| `no-floating-promises` (with `checkThenables`) | **The important one.** A missing `await` on `db.insert(...)` returns before the write lands. Drizzle builders are custom thenables, so this needs `checkThenables: true` to be caught at all. |
+| `no-misused-promises` | `onClick={async …}` where the rejection vanishes. |
+| `no-explicit-any` + `no-unsafe-*` | `any` silently disables every other rule downstream. |
+| `unused-imports/*` | AI leaves scaffolding behind on every edit. |
+| `no-unnecessary-condition` | Flags defensive checks that can never be false — the classic sign of code written without reading the types. |
+| `no-useless-catch` | `try { … } catch (e) { throw e }` wrappers. |
+| `no-restricted-imports` | Blocks `@/db/client` (bypasses the `server-only` guard) and `../../` climbing. |
+| `no-restricted-syntax` | Flags `fetch` inside `useEffect` (load in a Server Component instead) and TS `enum`. |
+
+`src/components/ui/**` is ignored — it is generated by shadcn. Re-add components
+rather than hand-editing them.
+
+**Do not disable a rule to make the build pass.** `@ts-ignore` is banned outright;
+`@ts-expect-error` requires a written reason. If a rule is genuinely wrong, say so in
+the PR and change the config once for everyone.
 
 ---
 
@@ -197,7 +273,7 @@ maps them). Every table gets `id` (uuid), `createdAt`, `updatedAt`.
 ```bash
 git checkout -b feat/orders
 # work
-npm run typecheck && npm run build     # BOTH must pass before you push
+npm run verify                          # typecheck + lint + build, all must pass
 git add -A && git commit -m "feat: order list and create form"
 git push -u origin feat/orders
 ```
@@ -289,9 +365,11 @@ bad features do.
 
 ```bash
 npm run dev          # dev server
-npm run build        # production build — must pass before pushing
+npm run verify       # typecheck + lint + build — run this before you push
+npm run build        # production build
 npm run typecheck    # tsc --noEmit
 npm run lint         # eslint
+npm run lint:fix     # eslint --fix
 
 npm run db:up        # start local Postgres (port 5442)
 npm run db:down      # stop it

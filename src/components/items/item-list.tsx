@@ -39,7 +39,7 @@ export function ItemList({ items }: { items: Item[] }) {
             onCheckedChange={(checked) =>
               startTransition(async () => {
                 const res = await toggleItem(item.id, checked === true);
-                if (res.error) toast.error(res.error);
+                if (res.status === "error") toast.error(res.message);
               })
             }
             className="mt-1"
@@ -61,8 +61,8 @@ export function ItemList({ items }: { items: Item[] }) {
             onClick={() =>
               startTransition(async () => {
                 const res = await deleteItem(item.id);
-                if (res.error) toast.error(res.error);
-                else toast.success("Deleted");
+                if (res.status === "error") toast.error(res.message);
+                else toast.success(res.message ?? "Deleted");
               })
             }
           >
