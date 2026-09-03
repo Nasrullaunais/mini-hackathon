@@ -214,15 +214,39 @@ actually works deployed. Get one teammate to merge it.
 
 ## 7. Deployment
 
-Pushing to `main` deploys to production automatically. That is the whole workflow.
+**Production URL:** <https://mini-hackathon-gen-x5.vercel.app>
+**Vercel project:** `gen-x5/mini-hackathon`
+
+Once the repo is connected (see §7.1), pushing to `main` deploys to production
+automatically and every PR gets a preview URL. Until then, deploy manually:
 
 ```bash
-npm run deploy      # manual production deploy, if you need it
+npm run deploy      # production deploy
 npx vercel logs     # runtime logs when production misbehaves
 ```
 
-After the first deploy, open `/api/health` on the production URL. If it says
-`db: down`, `DATABASE_URL` is missing in Vercel — check `npx vercel env ls`.
+After any deploy, open `/api/health` on the production URL. If it says `db: down`,
+`DATABASE_URL` is missing in Vercel — check `npx vercel env ls`.
+
+### 7.1 One-time owner setup (browser, ~3 minutes)
+
+These three need a human in the Vercel dashboard. **Do them before the clock starts.**
+
+1. **Provision Neon** — accept the marketplace terms once:
+   <https://vercel.com/gen-x5/~/integrations/accept-terms/neon?source=cli>
+   Then run `npx vercel integration add neon --plan free_v2` and `npm run env:pull`.
+
+2. **Connect GitHub** for auto-deploy — grant the Vercel GitHub App access to
+   `Nasrullaunais/mini-hackathon`, then `npx vercel git connect`:
+   <https://vercel.com/gen-x5/mini-hackathon/settings/git>
+
+3. **Turn off Deployment Protection** — production is currently behind Vercel SSO, so
+   anyone without a GenX team account gets a login wall. **Your demo video and the
+   judges will hit that wall.** Set Vercel Authentication to Disabled:
+   <https://vercel.com/gen-x5/mini-hackathon/settings/deployment-protection>
+
+Verify all three: `curl https://mini-hackathon-gen-x5.vercel.app/api/health` should
+return `{"ok":true,"db":"up"}` from a logged-out machine or an incognito window.
 
 ---
 

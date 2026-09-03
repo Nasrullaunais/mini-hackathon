@@ -5,6 +5,8 @@ Next.js 16 · Postgres (Neon) · Drizzle · shadcn/ui · Tailwind v4 · deployed
 > **Read [GUIDELINES.md](./GUIDELINES.md) before writing code.** It covers the
 > workflow, the feature pattern, git rules, and the 4-hour plan.
 
+**Live:** <https://mini-hackathon-gen-x5.vercel.app>
+
 ## Topic
 
 _Fill this in once the team picks._
