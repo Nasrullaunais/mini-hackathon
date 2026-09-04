@@ -248,9 +248,8 @@ export const teams = pgTable(
 /* ------------------------------------------------------------------ users */
 
 /**
- * People. NO auth in this build -- there is deliberately no password or session
- * column. The header has a "Signed in as" picker that writes a cookie; see §10.
- * Adding auth columns we never use would be worse than not having them.
+ * People, and the role each one acts in. Login is by `phone` -- see §5b, which
+ * also adds `passwordHash` below and the `sessions` table.
  */
 export const users = pgTable(
   "users",
@@ -258,8 +257,10 @@ export const users = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     name: text("name").notNull(),
     role: text("role", { enum: USER_ROLES }).notNull().default("citizen"),
-    /** Phone-first country: this is the natural contact key. */
+    /** Phone-first country: this is the natural contact key, and the login id. */
     phone: text("phone").unique(),
+    /** scrypt, "scrypt:<saltHex>:<hashHex>". NULL = account cannot log in. */
+    passwordHash: text("password_hash"),
     /** Home area for a citizen, assigned area for an officer. Optional. */
     areaId: uuid("area_id").references(() => areas.id, { onDelete: "set null" }),
     /** Only set for role = "crew". Which crew this person goes out with. */
@@ -674,15 +675,23 @@ and `logout` are all Server Actions — which they were going to be anyway.
 ### Files — all new, all A's, no conflict with B/C/D
 
 ```
-src/lib/auth.ts                   hashPassword / verifyPassword / createSession
+src/lib/auth.ts                   hashPassword / verifyPassword / newSessionToken
 src/lib/validations/auth.ts       registerSchema, loginSchema
 src/lib/actions/auth.ts           register, login, logout
-src/lib/current-user.ts           now reads the session cookie
+src/lib/current-user.ts           getCurrentUser / createSession / destroySession
 src/app/login/page.tsx
 src/app/register/page.tsx
 src/components/auth/login-form.tsx
 src/components/auth/register-form.tsx
 ```
+
+**Why `createSession` sits in `current-user.ts`, not `auth.ts`** (changed while
+building, and it is not cosmetic): `seed.ts` needs `hashPassword()`, and it runs
+under `tsx`, where importing `@/db` **throws** — `src/db/index.ts` imports
+`server-only`, whose non-`react-server` entry is a bare `throw`. So `auth.ts`
+imports nothing from `@/db` or `next/*` and holds only `node:crypto` work; every
+function that touches the `sessions` table or the cookie lives in
+`current-user.ts`. Same two files as before, one boundary moved.
 
 **`getCurrentUser()` keeps its exact signature** — `Promise<User | null>`. B, C
 and D call it the same way they were already going to, so this change costs them
