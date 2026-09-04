@@ -67,6 +67,12 @@ only rethrows, `fetch` inside `useEffect`.
 **Do not silence a rule to make the build pass.** `@ts-ignore` is banned;
 `@ts-expect-error` requires a written reason. Fix the underlying issue.
 
+## Git
+
+Commit locally, but do not `git push`. The team pushes from VS Code's Source
+Control panel themselves — evaluators review the commit/push history, so pushes
+need to come from the human, not the assistant.
+
 ## Before claiming a task is done
 
 ```bash
