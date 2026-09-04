@@ -26,19 +26,21 @@ Open <http://localhost:3000/api/health> — must return `{"ok":true,"db":"up"}`.
 
 If health is not ok, your database is not reachable. Fix that before anything else.
 
-### Using the shared Neon database instead
+That is the whole setup. **Everyone develops against their own local Docker
+Postgres** — there is nothing to request from anyone and no credentials to share.
 
-Production runs on Neon. To point your local app at it:
+### About Neon
 
-```bash
-npx vercel login          # once
-npx vercel link --yes     # once
-npm run env:pull          # writes DATABASE_URL into .env.local
-```
+Neon is the database the *deployed* app uses. It is not part of your local loop.
 
-**Which should you use?** Local Docker while building features. Neon when you need to
-check something against real deployed data. Local is faster and you cannot break
-anyone else's work with a bad migration.
+Only the project owner can reach it: the Vercel team is on the Hobby plan, which has
+a single seat, so `vercel link` and `npm run env:pull` will not work for anyone else.
+That is deliberate, not a missing invite — four people sharing one database means one
+person's `db:reset` wipes the data the demo runs on.
+
+**Never share `.env.local`.** It is gitignored, it holds live Neon credentials, and
+it also contains a `VERCEL_OIDC_TOKEN` tied to the owner's personal Vercel account.
+If you genuinely need to inspect production data, ask the owner to run the query.
 
 ---
 
@@ -261,8 +263,9 @@ npm run db:reset       # nuke local db and start clean
 npm run db:seed        # reload sample rows
 ```
 
-**Before the demo**, the schema owner runs `db:push` once against Neon so production
-matches. Pull the Neon URL first (`npm run env:pull`), push, then switch back to local.
+**Before the demo**, the project owner runs `db:push` once against Neon so production
+matches — they are the only one who can, per §1. Everyone else only ever pushes to
+their own local database.
 
 Conventions: `snake_case` column names in the DB, `camelCase` in TypeScript (Drizzle
 maps them). Every table gets `id` (uuid), `createdAt`, `updatedAt`.
