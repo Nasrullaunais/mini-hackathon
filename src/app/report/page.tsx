@@ -27,7 +27,7 @@ export default async function ReportPage() {
 
   if (!actor) {
     return (
-      <main className="mx-auto max-w-md p-6">
+      <main className="mx-auto w-full max-w-md p-6">
         <Empty>
           <EmptyHeader>
             <EmptyTitle>Sign in to report a site</EmptyTitle>
@@ -51,7 +51,7 @@ export default async function ReportPage() {
     .orderBy(asc(areas.name));
 
   return (
-    <main className="mx-auto max-w-xl space-y-6 p-6">
+    <main className="mx-auto w-full max-w-xl space-y-6 p-6">
       <Card>
         <CardHeader>
           <CardTitle>Report a breeding site</CardTitle>

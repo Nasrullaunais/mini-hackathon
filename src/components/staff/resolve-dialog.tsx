@@ -93,6 +93,11 @@ export function ResolveDialog({
           </FieldGroup>
 
           <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="outline">
+                Cancel
+              </Button>
+            </DialogClose>
             <Button type="submit" disabled={isPending}>
               {isPending ? "Saving..." : "Confirm resolution"}
             </Button>

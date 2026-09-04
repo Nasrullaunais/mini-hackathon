@@ -17,7 +17,7 @@ export default async function StaffPage() {
 
   if (!actor || actor.role !== "officer") {
     return (
-      <main className="mx-auto max-w-6xl p-6">
+      <main className="mx-auto w-full max-w-6xl p-6">
         <Empty>
           <EmptyHeader>
             <EmptyTitle>Officers only</EmptyTitle>
@@ -58,7 +58,7 @@ export default async function StaffPage() {
   };
 
   return (
-    <main className="mx-auto max-w-6xl space-y-6 p-6">
+    <main className="mx-auto w-full max-w-6xl space-y-6 p-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Triage queue</h1>
         <p className="text-muted-foreground text-sm">

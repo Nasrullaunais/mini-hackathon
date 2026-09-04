@@ -1,4 +1,5 @@
 import { and, asc, eq } from "drizzle-orm";
+import Link from "next/link";
 import { db } from "@/db";
 import { areas, reports } from "@/db/schema";
 import { getCurrentUser } from "@/lib/current-user";
@@ -21,7 +22,7 @@ export default async function TeamPage() {
 
   if (!actor || actor.role !== "crew") {
     return (
-      <main className="mx-auto max-w-4xl p-6">
+      <main className="mx-auto w-full max-w-4xl p-6">
         <Empty>
           <EmptyHeader>
             <EmptyTitle>Field crew only</EmptyTitle>
@@ -36,7 +37,7 @@ export default async function TeamPage() {
 
   if (!actor.teamId) {
     return (
-      <main className="mx-auto max-w-4xl p-6">
+      <main className="mx-auto w-full max-w-4xl p-6">
         <Empty>
           <EmptyHeader>
             <EmptyTitle>Not assigned to a team</EmptyTitle>
@@ -57,7 +58,7 @@ export default async function TeamPage() {
     .orderBy(asc(reports.dispatchedAt));
 
   return (
-    <main className="mx-auto max-w-4xl space-y-6 p-6">
+    <main className="mx-auto w-full max-w-4xl space-y-6 p-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Your jobs</h1>
         <p className="text-muted-foreground text-sm">
@@ -85,7 +86,12 @@ export default async function TeamPage() {
                     <StatusBadge status={report.status} />
                     <RiskBadge riskLevel={report.riskLevel} />
                   </div>
-                  <p className="font-medium">{report.addressLine}</p>
+                  <Link
+                    href={`/reports/${report.id}`}
+                    className="font-medium hover:underline"
+                  >
+                    {report.addressLine}
+                  </Link>
                   <p className="text-muted-foreground text-sm">
                     {SITE_TYPE_LABEL[report.siteType]} · {areaName}
                   </p>

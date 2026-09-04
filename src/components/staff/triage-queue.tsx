@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { Report, TeamType } from "@/db/schema";
 import { SITE_TYPE_LABEL } from "@/lib/labels";
 import { StatusBadge } from "@/components/reports/status-badge";
@@ -84,7 +85,15 @@ export function TriageQueue({ reported, underReview, dispatched, teams }: Triage
                 {rows[group.key].map((report) => (
                   <TableRow key={report.id}>
                     <TableCell className="max-w-64 truncate font-medium">
-                      {report.addressLine}
+                      {/* Truncated on purpose, so give the officer both the
+                          full text on hover and a way into the report. */}
+                      <Link
+                        href={`/reports/${report.id}`}
+                        title={report.addressLine}
+                        className="hover:underline"
+                      >
+                        {report.addressLine}
+                      </Link>
                     </TableCell>
                     <TableCell>{SITE_TYPE_LABEL[report.siteType]}</TableCell>
                     <TableCell>{report.areaName}</TableCell>
@@ -95,37 +104,42 @@ export function TriageQueue({ reported, underReview, dispatched, teams }: Triage
                     <TableCell>
                       <StatusBadge status={report.status} />
                     </TableCell>
-                    <TableCell className="flex justify-end gap-2 text-right">
-                      {report.status === "reported" && (
-                        <>
-                          <AssessDialog
-                            reportId={report.id}
-                            addressLine={report.addressLine}
-                          />
-                          <RejectDialog
-                            reportId={report.id}
-                            addressLine={report.addressLine}
-                          />
-                        </>
-                      )}
-                      {report.status === "under_review" && (
-                        <>
-                          <DispatchDialog
-                            reportId={report.id}
-                            addressLine={report.addressLine}
-                            teams={teams}
-                          />
-                          <RejectDialog
-                            reportId={report.id}
-                            addressLine={report.addressLine}
-                          />
-                        </>
-                      )}
-                      {report.status === "dispatched" && (
-                        <span className="text-muted-foreground text-sm">
-                          Waiting on the field crew
-                        </span>
-                      )}
+                    {/* The flex lives on an inner div: `display:flex` on a <td>
+                        drops it out of the table layout and the row heights
+                        stop matching. */}
+                    <TableCell>
+                      <div className="flex items-center justify-end gap-2">
+                        {report.status === "reported" && (
+                          <>
+                            <AssessDialog
+                              reportId={report.id}
+                              addressLine={report.addressLine}
+                            />
+                            <RejectDialog
+                              reportId={report.id}
+                              addressLine={report.addressLine}
+                            />
+                          </>
+                        )}
+                        {report.status === "under_review" && (
+                          <>
+                            <DispatchDialog
+                              reportId={report.id}
+                              addressLine={report.addressLine}
+                              teams={teams}
+                            />
+                            <RejectDialog
+                              reportId={report.id}
+                              addressLine={report.addressLine}
+                            />
+                          </>
+                        )}
+                        {report.status === "dispatched" && (
+                          <span className="text-muted-foreground text-sm">
+                            Waiting on the field crew
+                          </span>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

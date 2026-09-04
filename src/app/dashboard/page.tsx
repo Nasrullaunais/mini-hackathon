@@ -13,7 +13,7 @@ export default async function DashboardPage() {
   ]);
 
   return (
-    <div className="container mx-auto max-w-5xl p-4 py-8 space-y-8">
+    <main className="mx-auto w-full max-w-6xl space-y-8 p-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight mb-2">Dashboard</h1>
         <p className="text-muted-foreground">
@@ -35,6 +35,6 @@ export default async function DashboardPage() {
         <h2 className="text-xl font-semibold mb-4">Team Workload</h2>
         <TeamWorkload workloads={workloads} />
       </section>
-    </div>
+    </main>
   );
 }

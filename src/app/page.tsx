@@ -8,7 +8,7 @@ export default async function Home() {
   const stats = await getGlobalStats();
 
   return (
-    <div className="mx-auto flex max-w-5xl flex-1 flex-col justify-center gap-10 p-6 py-12">
+    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col justify-center gap-10 p-6 py-12">
       <div className="space-y-4 text-center max-w-2xl mx-auto">
         <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
           DengueWatch
@@ -36,7 +36,7 @@ export default async function Home() {
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 w-full pt-8 border-t">
         <div className="flex flex-col gap-3">
           <h2 className="font-semibold text-lg">Citizens</h2>
-          <p className="text-sm text-muted-foreground mb-2 flex-1">
+          <p className="text-sm text-muted-foreground mb-2">
             Help your community by reporting stagnant water and blocked drains.
           </p>
           <Button asChild className="w-full">
@@ -49,7 +49,7 @@ export default async function Home() {
 
         <div className="flex flex-col gap-3">
           <h2 className="font-semibold text-lg">PHI Officers</h2>
-          <p className="text-sm text-muted-foreground mb-2 flex-1">
+          <p className="text-sm text-muted-foreground mb-2">
             Review incoming reports, assign risk levels, and dispatch teams to critical areas.
           </p>
           <Button asChild className="w-full">
@@ -62,7 +62,7 @@ export default async function Home() {
 
         <div className="flex flex-col gap-3 sm:col-span-2 lg:col-span-1">
           <h2 className="font-semibold text-lg">Field Crews</h2>
-          <p className="text-sm text-muted-foreground mb-2 flex-1">
+          <p className="text-sm text-muted-foreground mb-2">
             See your dispatched jobs, resolve them on the ground, and close the loop.
           </p>
           <Button asChild className="w-full">
@@ -70,6 +70,6 @@ export default async function Home() {
           </Button>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

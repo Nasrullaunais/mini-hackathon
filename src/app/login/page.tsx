@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { LoginForm } from "@/components/auth/login-form";
+import { getCurrentUser } from "@/lib/current-user";
 import {
   Card,
   CardHeader,
@@ -9,9 +11,14 @@ import {
   CardFooter,
 } from "@/components/ui/card";
 
-export default function LoginPage() {
+export const dynamic = "force-dynamic";
+
+export default async function LoginPage() {
+  // Already signed in: a second sign-in form is a dead end, not a choice.
+  if (await getCurrentUser()) redirect("/");
+
   return (
-    <main className="mx-auto max-w-sm space-y-6 p-6">
+    <main className="mx-auto w-full max-w-sm space-y-6 p-6">
       <Card>
         <CardHeader>
           <CardTitle>Sign in</CardTitle>
@@ -22,8 +29,10 @@ export default function LoginPage() {
         <CardContent>
           <LoginForm />
         </CardContent>
-        <CardFooter className="text-muted-foreground text-sm">
-          New here?{" "}
+        {/* gap-1, not {" "}: CardFooter is a flex row, so a whitespace-only
+            text node between the two children is dropped. */}
+        <CardFooter className="text-muted-foreground gap-1 text-sm">
+          New here?
           <Link href="/register" className="text-foreground underline">
             Create an account
           </Link>

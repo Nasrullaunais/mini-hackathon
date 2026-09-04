@@ -99,6 +99,11 @@ export function DispatchDialog({
           </FieldGroup>
 
           <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="outline">
+                Cancel
+              </Button>
+            </DialogClose>
             <Button type="submit" disabled={isPending}>
               {isPending ? "Dispatching..." : "Confirm dispatch"}
             </Button>

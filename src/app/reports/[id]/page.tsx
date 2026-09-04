@@ -1,6 +1,8 @@
 import { asc, eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import Image from "next/image";
+import Link from "next/link";
+import { ChevronLeftIcon } from "lucide-react";
 import { db } from "@/db";
 import { areas, reportEvents, reports, teams, users } from "@/db/schema";
 import { reportIdSchema } from "@/lib/validations/reports";
@@ -63,7 +65,15 @@ export default async function ReportDetailPage({
   }));
 
   return (
-    <main className="mx-auto max-w-3xl space-y-6 p-6">
+    <main className="mx-auto w-full max-w-3xl space-y-6 p-6">
+      <Link
+        href="/reports"
+        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-sm"
+      >
+        <ChevronLeftIcon className="size-4" />
+        Back to reports
+      </Link>
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">{report.addressLine}</h1>
@@ -77,8 +87,10 @@ export default async function ReportDetailPage({
         </div>
       </div>
 
-      <div className="bg-muted relative aspect-video w-full overflow-hidden rounded-lg">
-        {report.photoUrl ? (
+      {/* Most reports have no photo; a full aspect-video placeholder for them
+          is a big grey nothing, so only reserve that space when there is one. */}
+      {report.photoUrl ? (
+        <div className="bg-muted relative aspect-video w-full overflow-hidden rounded-lg">
           <Image
             src={report.photoUrl}
             alt={report.addressLine}
@@ -86,12 +98,12 @@ export default async function ReportDetailPage({
             className="object-cover"
             sizes="768px"
           />
-        ) : (
-          <div className="text-muted-foreground flex h-full items-center justify-center text-sm">
-            No photo submitted
-          </div>
-        )}
-      </div>
+        </div>
+      ) : (
+        <div className="bg-muted text-muted-foreground rounded-lg px-4 py-6 text-center text-sm">
+          No photo submitted
+        </div>
+      )}
 
       <Card>
         <CardHeader>
@@ -99,7 +111,9 @@ export default async function ReportDetailPage({
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
           <p>{report.description}</p>
-          <dl className="text-muted-foreground grid grid-cols-2 gap-x-4 gap-y-2">
+          {/* Fixed label column: an even 2-col split strands the value at the
+              far side of a 768px card. */}
+          <dl className="text-muted-foreground grid grid-cols-[10rem_1fr] gap-x-4 gap-y-2">
             <dt>Reported by</dt>
             <dd className="text-foreground">{reporterName}</dd>
             {report.reportedSeverity && (

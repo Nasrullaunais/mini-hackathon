@@ -70,6 +70,11 @@ export function RejectDialog({
           </FieldGroup>
 
           <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="outline">
+                Cancel
+              </Button>
+            </DialogClose>
             <Button type="submit" variant="destructive" disabled={isPending}>
               {isPending ? "Rejecting..." : "Confirm rejection"}
             </Button>
