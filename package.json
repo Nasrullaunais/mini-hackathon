@@ -14,12 +14,13 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx --env-file=.env.local src/db/seed.ts",
-    "env:pull": "vercel env pull .env.local",
-    "deploy": "vercel deploy --prod",
+    "env:pull": "npx vercel env pull .env.local",
+    "deploy": "npx vercel deploy --prod",
     "lint:fix": "eslint --fix",
     "verify": "npm run typecheck && npm run lint && npm run build"
   },
   "dependencies": {
+    "@vercel/blob": "^2.8.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.45.2",
