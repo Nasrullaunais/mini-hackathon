@@ -14,12 +14,22 @@ import {
   type ActionState,
 } from "@/lib/form";
 
+/** Re-shown on error so a rejected submit doesn't force retyping the whole form. */
+export type RegisterSubmitted = { name?: string; phone?: string };
+
 export async function register(
-  _prev: ActionState,
+  _prev: ActionState<RegisterSubmitted>,
   formData: FormData,
-): Promise<ActionState> {
+): Promise<ActionState<RegisterSubmitted>> {
+  const rawName = formData.get("name");
+  const rawPhone = formData.get("phone");
+  const submitted: RegisterSubmitted = {
+    name: typeof rawName === "string" ? rawName : undefined,
+    phone: typeof rawPhone === "string" ? rawPhone : undefined,
+  };
+
   const parsed = parseForm(registerSchema, formData);
-  if (!parsed.ok) return parsed.state;
+  if (!parsed.ok) return { ...parsed.state, data: submitted };
 
   const { name, phone, password } = parsed.data;
 
@@ -29,9 +39,11 @@ export async function register(
     .where(eq(users.phone, phone))
     .limit(1);
   if (existing.length > 0) {
-    return actionError("That phone number is already registered", {
-      phone: ["That phone number is already registered"],
-    });
+    return actionError(
+      "That phone number is already registered",
+      { phone: ["That phone number is already registered"] },
+      submitted,
+    );
   }
 
   const passwordHash = await hashPassword(password);
@@ -43,7 +55,7 @@ export async function register(
   await createSession(user.id);
 
   revalidatePath("/", "layout");
-  return actionSuccess(undefined, "Account created");
+  return actionSuccess<RegisterSubmitted>(undefined, "Account created");
 }
 
 export async function login(

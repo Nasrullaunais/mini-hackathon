@@ -3,8 +3,8 @@
 import { useActionState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { register } from "@/lib/actions/auth";
-import { idleState } from "@/lib/form";
+import { register, type RegisterSubmitted } from "@/lib/actions/auth";
+import type { ActionState } from "@/lib/form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -13,6 +13,8 @@ import {
   FieldGroup,
   FieldError,
 } from "@/components/ui/field";
+
+const idleState: ActionState<RegisterSubmitted> = { status: "idle" };
 
 export function RegisterForm() {
   const [state, formAction, isPending] = useActionState(register, idleState);
@@ -35,6 +37,7 @@ export function RegisterForm() {
             id="name"
             name="name"
             placeholder="Your name"
+            defaultValue={state.data?.name}
             aria-invalid={!!state.fieldErrors?.name}
           />
           <FieldError errors={state.fieldErrors?.name?.map((m) => ({ message: m }))} />
@@ -47,6 +50,7 @@ export function RegisterForm() {
             name="phone"
             type="tel"
             placeholder="07XXXXXXXX"
+            defaultValue={state.data?.phone}
             aria-invalid={!!state.fieldErrors?.phone}
           />
           <FieldError errors={state.fieldErrors?.phone?.map((m) => ({ message: m }))} />
@@ -63,6 +67,20 @@ export function RegisterForm() {
           />
           <FieldError
             errors={state.fieldErrors?.password?.map((m) => ({ message: m }))}
+          />
+        </Field>
+
+        <Field data-invalid={!!state.fieldErrors?.confirmPassword}>
+          <FieldLabel htmlFor="confirmPassword">Confirm password</FieldLabel>
+          <Input
+            id="confirmPassword"
+            name="confirmPassword"
+            type="password"
+            placeholder="Re-enter your password"
+            aria-invalid={!!state.fieldErrors?.confirmPassword}
+          />
+          <FieldError
+            errors={state.fieldErrors?.confirmPassword?.map((m) => ({ message: m }))}
           />
         </Field>
 

@@ -14,11 +14,12 @@ export type ActionState<T = undefined> = {
 
 export const idleState: ActionState = { status: "idle" };
 
-export function actionError(
+export function actionError<T = never>(
   message: string,
   fieldErrors?: Record<string, string[] | undefined>,
-): ActionState<never> {
-  return { status: "error", message, fieldErrors };
+  data?: T,
+): ActionState<T> {
+  return { status: "error", message, fieldErrors, data };
 }
 
 export function actionSuccess<T>(data?: T, message?: string): ActionState<T> {
