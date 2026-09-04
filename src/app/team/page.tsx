@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import Link from "next/link";
 import { db } from "@/db";
 import { areas, reports } from "@/db/schema";
@@ -54,11 +54,19 @@ export default async function TeamPage() {
     .select({ report: reports, areaName: areas.name })
     .from(reports)
     .innerJoin(areas, eq(reports.areaId, areas.id))
-    .where(and(eq(reports.assignedTeamId, actor.teamId), eq(reports.status, "dispatched")))
-    .orderBy(asc(reports.dispatchedAt));
+    .where(
+      and(
+        eq(reports.assignedTeamId, actor.teamId),
+        inArray(reports.status, ["dispatched", "cleared"]),
+      ),
+    )
+    .orderBy(desc(reports.updatedAt));
+
+  const openJobs = rows.filter(({ report }) => report.status === "dispatched");
+  const resolvedJobs = rows.filter(({ report }) => report.status === "cleared");
 
   return (
-    <main className="mx-auto w-full max-w-4xl space-y-6 p-6">
+    <main className="mx-auto w-full max-w-4xl space-y-8 p-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Your jobs</h1>
         <p className="text-muted-foreground text-sm">
@@ -67,41 +75,82 @@ export default async function TeamPage() {
         </p>
       </div>
 
-      {rows.length === 0 ? (
-        <Empty>
-          <EmptyHeader>
-            <EmptyTitle>No open jobs</EmptyTitle>
-            <EmptyDescription>
-              Nothing is currently dispatched to your team.
-            </EmptyDescription>
-          </EmptyHeader>
-        </Empty>
-      ) : (
-        <div className="space-y-4">
-          {rows.map(({ report, areaName }) => (
-            <Card key={report.id}>
-              <CardContent className="flex flex-wrap items-center justify-between gap-4">
-                <div className="space-y-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <StatusBadge status={report.status} />
-                    <RiskBadge riskLevel={report.riskLevel} />
+      <section className="space-y-4">
+        <h2 className="text-lg font-medium">Open</h2>
+        {openJobs.length === 0 ? (
+          <Empty>
+            <EmptyHeader>
+              <EmptyTitle>No open jobs</EmptyTitle>
+              <EmptyDescription>
+                Nothing is currently dispatched to your team.
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        ) : (
+          <div className="space-y-4">
+            {openJobs.map(({ report, areaName }) => (
+              <Card key={report.id}>
+                <CardContent className="flex flex-wrap items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <StatusBadge status={report.status} />
+                      <RiskBadge riskLevel={report.riskLevel} />
+                    </div>
+                    <Link
+                      href={`/reports/${report.id}`}
+                      className="font-medium hover:underline"
+                    >
+                      {report.addressLine}
+                    </Link>
+                    <p className="text-muted-foreground text-sm">
+                      {SITE_TYPE_LABEL[report.siteType]} · {areaName}
+                    </p>
                   </div>
-                  <Link
-                    href={`/reports/${report.id}`}
-                    className="font-medium hover:underline"
-                  >
-                    {report.addressLine}
-                  </Link>
-                  <p className="text-muted-foreground text-sm">
-                    {SITE_TYPE_LABEL[report.siteType]} · {areaName}
-                  </p>
-                </div>
-                <ResolveDialog reportId={report.id} addressLine={report.addressLine} />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
+                  <ResolveDialog reportId={report.id} addressLine={report.addressLine} />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-lg font-medium">Resolved by your team</h2>
+        {resolvedJobs.length === 0 ? (
+          <Empty>
+            <EmptyHeader>
+              <EmptyTitle>Nothing resolved yet</EmptyTitle>
+              <EmptyDescription>
+                Jobs your team clears will show up here.
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        ) : (
+          <div className="space-y-4">
+            {resolvedJobs.map(({ report, areaName }) => (
+              <Card key={report.id}>
+                <CardContent className="flex flex-wrap items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <StatusBadge status={report.status} />
+                      <RiskBadge riskLevel={report.riskLevel} />
+                    </div>
+                    <Link
+                      href={`/reports/${report.id}`}
+                      className="font-medium hover:underline"
+                    >
+                      {report.addressLine}
+                    </Link>
+                    <p className="text-muted-foreground text-sm">
+                      {SITE_TYPE_LABEL[report.siteType]} · {areaName}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </section>
     </main>
   );
 }

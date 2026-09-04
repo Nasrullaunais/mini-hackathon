@@ -45,6 +45,25 @@ export default async function ReportPage() {
     );
   }
 
+  if (actor.role === "crew") {
+    return (
+      <main className="mx-auto w-full max-w-md p-6">
+        <Empty>
+          <EmptyHeader>
+            <EmptyTitle>Not available for field crew</EmptyTitle>
+            <EmptyDescription>
+              Field crew accounts work from{" "}
+              <Link href="/team" className="underline">
+                My jobs
+              </Link>
+              .
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+      </main>
+    );
+  }
+
   const areaRows = await db
     .select({ id: areas.id, name: areas.name, district: areas.district })
     .from(areas)

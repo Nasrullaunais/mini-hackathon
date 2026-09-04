@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { getGlobalStats } from "@/lib/stats/area-risk";
+import { getCurrentUser } from "@/lib/current-user";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const stats = await getGlobalStats();
+  const [stats, actor] = await Promise.all([getGlobalStats(), getCurrentUser()]);
+  const role = actor?.role ?? "guest";
 
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col justify-center gap-10 p-6 py-12">
@@ -33,42 +35,66 @@ export default async function Home() {
         </div>
       </div>
 
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 w-full pt-8 border-t">
-        <div className="flex flex-col gap-3">
-          <h2 className="font-semibold text-lg">Citizens</h2>
-          <p className="text-sm text-muted-foreground mb-2">
-            Help your community by reporting stagnant water and blocked drains.
-          </p>
-          <Button asChild className="w-full">
-            <Link href="/report">Report a site</Link>
-          </Button>
-          <Button variant="outline" asChild className="w-full">
-            <Link href="/reports">Browse reports</Link>
-          </Button>
-        </div>
+      <div className="grid gap-6 w-full max-w-sm mx-auto pt-8 border-t">
+        {role === "guest" && (
+          <div className="flex flex-col gap-3">
+            <h2 className="font-semibold text-lg text-center">Browse reports</h2>
+            <p className="text-sm text-muted-foreground mb-2 text-center">
+              See what&apos;s been reported nearby. Sign in to report a site
+              yourself.
+            </p>
+            <Button asChild className="w-full">
+              <Link href="/reports">Browse reports</Link>
+            </Button>
+            <Button variant="outline" asChild className="w-full">
+              <Link href="/login">Sign in</Link>
+            </Button>
+          </div>
+        )}
 
-        <div className="flex flex-col gap-3">
-          <h2 className="font-semibold text-lg">PHI Officers</h2>
-          <p className="text-sm text-muted-foreground mb-2">
-            Review incoming reports, assign risk levels, and dispatch teams to critical areas.
-          </p>
-          <Button asChild className="w-full">
-            <Link href="/staff">Triage Queue</Link>
-          </Button>
-          <Button variant="outline" asChild className="w-full">
-            <Link href="/dashboard">View Dashboard</Link>
-          </Button>
-        </div>
+        {role === "citizen" && (
+          <div className="flex flex-col gap-3">
+            <h2 className="font-semibold text-lg text-center">Citizens</h2>
+            <p className="text-sm text-muted-foreground mb-2 text-center">
+              Help your community by reporting stagnant water and blocked drains.
+            </p>
+            <Button asChild className="w-full">
+              <Link href="/report">Report a site</Link>
+            </Button>
+            <Button variant="outline" asChild className="w-full">
+              <Link href="/reports">Browse reports</Link>
+            </Button>
+          </div>
+        )}
 
-        <div className="flex flex-col gap-3 sm:col-span-2 lg:col-span-1">
-          <h2 className="font-semibold text-lg">Field Crews</h2>
-          <p className="text-sm text-muted-foreground mb-2">
-            See your dispatched jobs, resolve them on the ground, and close the loop.
-          </p>
-          <Button asChild className="w-full">
-            <Link href="/team">My Team&apos;s Jobs</Link>
-          </Button>
-        </div>
+        {role === "officer" && (
+          <div className="flex flex-col gap-3">
+            <h2 className="font-semibold text-lg text-center">PHI Officers</h2>
+            <p className="text-sm text-muted-foreground mb-2 text-center">
+              Review incoming reports, assign risk levels, and dispatch teams to
+              critical areas.
+            </p>
+            <Button asChild className="w-full">
+              <Link href="/staff">Triage Queue</Link>
+            </Button>
+            <Button variant="outline" asChild className="w-full">
+              <Link href="/dashboard">View Dashboard</Link>
+            </Button>
+          </div>
+        )}
+
+        {role === "crew" && (
+          <div className="flex flex-col gap-3">
+            <h2 className="font-semibold text-lg text-center">Field Crews</h2>
+            <p className="text-sm text-muted-foreground mb-2 text-center">
+              See your dispatched jobs, resolve them on the ground, and close
+              the loop.
+            </p>
+            <Button asChild className="w-full">
+              <Link href="/team">My Team&apos;s Jobs</Link>
+            </Button>
+          </div>
+        )}
       </div>
     </main>
   );

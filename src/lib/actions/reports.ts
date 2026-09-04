@@ -19,6 +19,9 @@ export async function createReport(
   if (!actor) {
     return actionError("Sign in to submit a report");
   }
+  if (actor.role === "crew") {
+    return actionError("Field crew accounts can't submit reports");
+  }
 
   const { photo, ...values } = parsed.data;
 

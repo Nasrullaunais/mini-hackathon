@@ -11,8 +11,8 @@ import { cn } from "@/lib/utils";
  * citizen the triage queue only leads them to an "Officers only" wall.
  */
 const LINKS: { href: string; label: string; roles: (UserRole | "guest")[] }[] = [
-  { href: "/reports", label: "Reports", roles: ["guest", "citizen", "officer", "crew"] },
-  { href: "/report", label: "Report a site", roles: ["citizen", "officer", "crew"] },
+  { href: "/reports", label: "Reports", roles: ["guest", "citizen", "officer"] },
+  { href: "/report", label: "Report a site", roles: ["citizen", "officer"] },
   { href: "/staff", label: "Triage", roles: ["officer"] },
   { href: "/dashboard", label: "Dashboard", roles: ["officer"] },
   { href: "/team", label: "My jobs", roles: ["crew"] },
