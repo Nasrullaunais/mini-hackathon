@@ -90,6 +90,8 @@ demo-friendly thing in the app — it makes the whole process visible in one scr
 | Route | Owner | What it does |
 |---|---|---|
 | `/` | D | Landing: one-line pitch, role buttons, three live counters |
+| `/register` | A | Citizen sign-up. Phone + name + password. See §5b |
+| `/login` | A | Phone + password. Seeded officer/crew accounts log in here too |
 | `/report` | A | The create form, with photo upload. Server Action + `useActionState` |
 | `/reports` | B | Public list. Filter by area, status, site type. Photo thumb + status badge |
 | `/reports/[id]` | B | Detail: photo, description, assessment, assigned team, event timeline |
@@ -504,12 +506,17 @@ export const reportIdSchema = z.uuid("Not a valid report id");
 export const userIdSchema = z.uuid("Not a valid user id");
 
 /**
- * What the citizen form owns. Note what is NOT picked: status, riskLevel,
- * assignedTeamId, actionTaken, resolvedAt. Zod strips them, so the form
- * physically cannot set them.
+ * What the citizen form owns. Note what is NOT picked: reporterId, status,
+ * riskLevel, assignedTeamId, actionTaken, resolvedAt. Zod strips them, so the
+ * form physically cannot set them.
+ *
+ * `reporterId` is deliberately NOT here. The acting user comes from the cookie
+ * via getCurrentUser() on the server -- the same rule the officer and crew
+ * schemas below follow. A hidden <input name="reporterId"> would be forgeable
+ * AND is one more thing to wire up; `userIdSchema` still exists because
+ * createReport validates the cookie value with it before inserting.
  */
 export const reportFormSchema = createInsertSchema(reports, {
-  reporterId: userIdSchema,
   areaId: z.uuid("Select an area"),
   addressLine: (schema) =>
     schema
@@ -524,7 +531,6 @@ export const reportFormSchema = createInsertSchema(reports, {
       .max(2000, "Description must be 2000 characters or fewer"),
 })
   .pick({
-    reporterId: true,
     areaId: true,
     addressLine: true,
     siteType: true,
@@ -603,6 +609,102 @@ export const SITE_TYPE_LABEL: Record<SiteType, string> = {
 
 ---
 
+## 5b. Authentication — register and login
+
+Added after the first draft. The app now has **real accounts**: a citizen can
+register, anyone can log in, and `getCurrentUser()` reads a session rather than
+a user-chosen cookie. What we are explicitly **not** building is route-level
+role gating — no middleware, no per-page guards, no email verification, no
+password reset. Those are hours we do not have and marks we do not get.
+
+The per-action role checks already specified in §7 step 2 **stay**. They are two
+lines each and they are what makes the lifecycle correct, not a security layer:
+without them a crew member can dispatch to themselves and the state machine
+stops meaning anything.
+
+### Schema delta — A applies this before freezing `schema.ts`
+
+```ts
+// on `users`, alongside the existing columns:
+  /** scrypt, "scrypt:<saltHex>:<hashHex>". NULL = seeded account, cannot log in. */
+  passwordHash: text("password_hash"),
+
+// and one new table:
+export const sessions = pgTable(
+  "sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** Opaque 32-byte random token, base64url. This is what the cookie holds. */
+    token: text("token").notNull().unique(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    ...timestamps,
+  },
+  (table) => [index("sessions_token_idx").on(table.token)],
+);
+```
+
+Delete order in `seed.ts` becomes: `reportEvents` → `reports` → `sessions` →
+`users` → `teams` → `areas`.
+
+### Two decisions, and why
+
+**Hash with `scrypt` from `node:crypto`.** Not bcrypt or argon2: those are
+native modules and need install scripts, which **npm 12 blocks in this repo**
+(see `allowScripts` in `package.json`) — you would lose 20 minutes to a build
+that fails only on Vercel. `scrypt` is in the standard library, needs no
+dependency, and is a genuinely appropriate password hash. Compare with
+`timingSafeEqual`.
+
+**Session = an opaque token in a `sessions` table, not a signed cookie.** A
+signed cookie would need a `SESSION_SECRET` in `.env.local` on four laptops —
+and per `GUIDELINES.md` §1 the other three **cannot run `env:pull`**. A row in a
+table needs no shared secret, works identically on every machine and on Vercel
+with zero setup, and makes logout an actual `DELETE` rather than a hope.
+
+### Cookie
+
+`dw_session`, `httpOnly: true`, `sameSite: "lax"`, `path: "/"`,
+`secure: process.env.NODE_ENV === "production"`, 7-day `maxAge`. Cookies can
+only be written from a Server Action or a Route Handler, so `login`, `register`
+and `logout` are all Server Actions — which they were going to be anyway.
+
+### Files — all new, all A's, no conflict with B/C/D
+
+```
+src/lib/auth.ts                   hashPassword / verifyPassword / createSession
+src/lib/validations/auth.ts       registerSchema, loginSchema
+src/lib/actions/auth.ts           register, login, logout
+src/lib/current-user.ts           now reads the session cookie
+src/app/login/page.tsx
+src/app/register/page.tsx
+src/components/auth/login-form.tsx
+src/components/auth/register-form.tsx
+```
+
+**`getCurrentUser()` keeps its exact signature** — `Promise<User | null>`. B, C
+and D call it the same way they were already going to, so this change costs them
+nothing.
+
+### Rules that keep this to ~45 minutes
+
+- **Login identifier is `phone`**, which is already `.unique()` on `users`. No
+  email column, no new index, and it matches the phone-first argument in §4.
+- **Register creates a `citizen`, always.** No role dropdown — that would be
+  self-serve privilege escalation, and it is a *better* demo line: "staff
+  accounts are provisioned by the health authority, not self-registered."
+  Officer and crew accounts come from the seed.
+- **Logged-out is not an error.** `/`, `/reports` and `/reports/[id]` are public
+  and stay public. `/report`, `/staff` and `/team` render an `Empty` state with
+  a "Sign in to continue" button when `getCurrentUser()` returns `null`. That is
+  one early-return per page, not a guard system.
+- Password rule: 8 characters minimum. Nothing else. `"At least 8 characters"`
+  is the message; do not build a strength meter.
+
+---
+
 ## 6. Photos — how they are saved and served
 
 **Saved:** the browser posts the actual file inside the Server Action's
@@ -638,13 +740,36 @@ if (photo) {
 await db.insert(reports).values({ ...values, photoUrl, photoPathname });
 ```
 
-Three pieces of setup, all owned by **A**:
+### Blob setup — DONE, before the clock. Nothing to redo.
 
-```bash
-npm i @vercel/blob
-# create the store on Vercel, then:
-npm run env:pull      # brings BLOB_READ_WRITE_TOKEN into .env.local
-```
+| | |
+|---|---|
+| Store | `denguewatch-photos` (`store_r0AS6p6maz3zdRmU`), region `iad1` |
+| Access | **public** — connected to the `mini-hackathon` project on all 3 envs |
+| Public host | `r0as6p6maz3zdrmu.public.blob.vercel-storage.com` |
+| Package | `@vercel/blob@^2.8.0`, already in `package.json` |
+| Verified | real `put()` -> public `GET 200 image/png` -> `list()` -> `del()` |
+
+`BLOB_READ_WRITE_TOKEN` is set in Vercel for Production, Preview and
+Development, so **the deployed app needs no further setup**.
+
+**Getting the token locally.** Per `GUIDELINES.md` §1 only the owner can run
+`npm run env:pull` (Hobby plan, one seat). Two traps, both already hit once:
+
+1. **`env:pull` overwrites the whole `.env.local`**, replacing the local Docker
+   `DATABASE_URL` with Neon's. That silently points your dev loop at the
+   production database. After pulling, restore the Docker URL from
+   `.env.example` and keep only `BLOB_READ_WRITE_TOKEN` from the pull. The
+   owner's `.env.local` is already in that state.
+2. **Teammates cannot pull it.** The owner should paste *only* the
+   `BLOB_READ_WRITE_TOKEN` line to whoever builds `/report` — never the whole
+   file, which also carries Neon credentials and a personal
+   `VERCEL_OIDC_TOKEN`. It is a write token to a throwaway demo store; the
+   `db:reset`-someone-else's-data risk that motivates the no-sharing rule does
+   not apply to it.
+
+Anyone without the token can still build every other slice: `photoUrl` is
+nullable, and reports submitted without a photo work end to end.
 
 ```ts
 // next.config.ts
@@ -656,7 +781,7 @@ const nextConfig: NextConfig = {
   },
   images: {
     remotePatterns: [
-      { protocol: "https", hostname: "**.public.blob.vercel-storage.com" },
+      { protocol: "https", hostname: "*.public.blob.vercel-storage.com" },
     ],
   },
 };
@@ -672,7 +797,13 @@ const nextConfig: NextConfig = {
    is set at 5MB *and* the input has `accept="image/*"` — catch it client-side so
    the user gets a real message.
 3. **`remotePatterns` is required** or `next/image` refuses to render Blob URLs.
-   If it's fighting you at 2:00, swap `<Image>` for a plain `<img>` and move on.
+   Already in `next.config.ts` — `*` matches one subdomain, which is exactly the
+   store hostname above. If it's fighting you at 2:00, swap `<Image>` for a
+   plain `<img>` and move on.
+4. **`tsx` runs `seed.ts` as CJS**, because `package.json` has no
+   `"type": "module"`. Top-level `await` is a build error there — wrap the seed
+   in an `async function main()` and call it. Costs 30 seconds if you know;
+   costs 10 minutes if you don't.
 
 Uploads happen on the server, inside the action, so `BLOB_READ_WRITE_TOKEN` never
 reaches the browser. Do not put it in a `NEXT_PUBLIC_*` variable.
@@ -716,8 +847,11 @@ Each one:
    → `actionError("That job is assigned to another team")`
 6. `db.transaction`: update `reports` (+ `updatedAt`, and `dispatchedAt` /
    `resolvedAt` where relevant) and insert the `report_events` row.
-7. `revalidatePath` for `/staff`, `/team`, `/reports`, `/reports/[id]`,
-   `/dashboard`, `/`
+7. `revalidatePath` for `/staff`, `/team`, `/reports`, `/dashboard`, `/` --
+   **and `revalidatePath("/reports/[id]", "page")` for the detail route.** The
+   second argument is required for a dynamic segment; without it the call is a
+   silent no-op and the timeline keeps showing the old status after a
+   transition. Same applies in `createReport`.
 8. `return actionSuccess(undefined, "Team dispatched")`
 
 ```ts
@@ -825,16 +959,23 @@ src/db/seed.ts
 src/lib/validations/reports.ts  ← ALL schemas incl. officer/crew, then frozen
 src/lib/labels.ts               ← then frozen
 src/lib/current-user.ts         ← then frozen
-src/components/user-switcher.tsx
+src/lib/auth.ts                 ← scrypt + sessions, see 5b
+src/lib/validations/auth.ts
+src/lib/actions/auth.ts         ← register / login / logout
+src/app/login/page.tsx
+src/app/register/page.tsx
+src/components/auth/            ← login-form, register-form
 src/lib/actions/reports.ts      ← createReport + Blob upload
 src/app/report/page.tsx
 src/components/report/report-form.tsx
 next.config.ts                  ← blob remotePatterns + bodySizeLimit
 ```
 
-A blocks everyone, so A ships **schema + validations + labels + current-user to
-`main` before touching the form.** A also owns the Blob store setup, done before
-the clock starts.
+A blocks everyone, so A ships **schema + validations + labels + current-user +
+`auth.ts` to `main` before touching any form.** Auth is roughly 45 minutes on top
+of A's original slice, which is why `createReport` moved later in §11 — it is the
+one piece of A's work that nobody else is waiting on. The Blob store setup is
+already done (§6).
 
 ### B — Public browsing
 
@@ -883,7 +1024,8 @@ D also owns the last-hour pass: empty states, loading skeletons, the page title,
 and making sure nothing says "Create Next App".
 
 **Shared but frozen after 0:30:** `src/db/schema.ts`,
-`src/lib/validations/reports.ts`, `src/lib/labels.ts`, `src/lib/current-user.ts`.
+`src/lib/validations/reports.ts`, `src/lib/labels.ts`, `src/lib/current-user.ts`,
+`src/lib/auth.ts`.
 Need a column? Ask A. Don't add it yourself.
 
 ### shadcn components to add up front
@@ -908,17 +1050,18 @@ problem at 3:45. Photos are how an officer judges a site, so a pasted-link
 fallback would have been visibly weaker, and a Drive link that doesn't hot-link
 would break on camera during the demo.
 
-**There is a `users` table, and no authentication.** Roles are real data;
-sessions are not. The header has a "Signed in as" picker that writes the chosen
-user id to a cookie; `getCurrentUser()` in `src/lib/current-user.ts` reads it
-server-side. That gives us role-gated actions, real attribution on every event,
-and shorter forms — nobody types their name into a dialog.
+**There is a `users` table, and real register/login.** Superseded — the
+original plan was a "Signed in as" picker writing a cookie, and that is gone.
+See **§5b** for the spec: scrypt password hashes, a `sessions` table, an
+httpOnly cookie, and `getCurrentUser()` reading the session. Roles are still
+real data, and attribution on every `report_events` row is still the point.
 
-Be honest about it on camera: *"this picker stands in for login; in a real
-deployment the officer console is behind PHI authentication."* A cookie the user
-controls is **not** a security boundary, and a Server Action is a public POST
-endpoint (the bundled Next docs say so explicitly). Judges respect a named
-limitation far more than a half-built login screen.
+What we deliberately did **not** build is route-level role gating. Say so on
+camera: *"accounts and sessions are real; what a production PHI console would
+add on top is route-level authorisation and audited staff provisioning."* A
+Server Action is a public POST endpoint (the bundled Next docs say so
+explicitly), so the role checks that matter live **in the actions** — §7 step 2.
+Judges respect a named limitation far more than a half-built login screen.
 
 **`teams` is a separate table from `users`.** You dispatch a *crew*, not a
 person. Crew users carry `team_id`; the report carries `assigned_team_id`. This
@@ -960,10 +1103,10 @@ Slotted into the timeline in `GUIDELINES.md` §8.
 |---|---|---|---|---|
 | **before 0:00** | Blob store created, `BLOB_READ_WRITE_TOKEN` pulled | | | |
 | 0:00–0:15 | Agree this doc. A is schema owner. One person runs the `shadcn add` batch. | | | |
-| 0:15–0:40 | `schema.ts` + `db:push` + validations + labels + current-user → **push to main** | scaffold `/reports` with hardcoded rows | scaffold `/staff` + `/team` shells | scaffold `/dashboard` + landing |
-| 0:40–1:20 | `createReport` + Blob upload + `/report` form | list + filters on real data | `assessReport` + assess dialog | `area-risk.ts` + the queries |
-| 1:20–1:40 | **seed.ts with real data** → push | detail page + timeline | dispatch + reject | risk table + team workload |
-| 1:40–2:30 | user switcher, then help wherever it's stuck | polish cards, empty states | resolve + `/team` | stat cards, landing counters, metadata |
+| 0:15–0:40 | `schema.ts` (incl. `sessions`, §5b) + `db:push` + validations + labels + `current-user` + `auth.ts` → **push to main** | scaffold `/reports` with hardcoded rows | scaffold `/staff` + `/team` shells | scaffold `/dashboard` + landing |
+| 0:40–1:20 | `register` / `login` / `logout` + the two forms | list + filters on real data | `assessReport` + assess dialog | `area-risk.ts` + the queries |
+| 1:20–1:40 | **seed.ts with real data** (hashed demo passwords) → push | detail page + timeline | dispatch + reject | risk table + team workload |
+| 1:40–2:30 | `createReport` + Blob upload + `/report` form, then help wherever it's stuck | polish cards, empty states | resolve + `/team` | stat cards, landing counters, header sign-in/out, metadata |
 | **2:30** | **FEATURE FREEZE.** A runs `env:pull` → `db:push` → `db:seed` against Neon, then switches back to local. Everyone tests the deployed URL. | | | |
 | 2:30–3:30 | Bug fixes only. Empty states, loading states, error toasts. Dry-run the demo. | | | |
 | 3:30–4:00 | Record. | | | |
@@ -982,7 +1125,11 @@ minutes and write it early; every screen looks broken until it exists.
 - **3 teams:** Fogging Unit A (Narahenpita), Cleaning Crew 2 (Dehiwala),
   Inspection Team North (Gampaha).
 - **~12 users:** 6 citizens, 3 officers (one per district), 3 crew — each crew
-  user carrying the `team_id` of their team.
+  user carrying the `team_id` of their team. **Every seeded user gets the same
+  demo password**, hashed with `hashPassword()` from `src/lib/auth.ts`, and the
+  phone numbers are the login identifiers. Put the password and the officer /
+  crew phone numbers in the README — you will need them on camera, and hunting
+  for them mid-take is how a good demo dies.
 - **~24 reports** spread deliberately, not randomly:
   - Narahenpita: **5 active**, two of them `high` → guaranteed "Danger zone"
   - Dehiwala: **3 active** → "Watch" + hotspot badge
@@ -1013,7 +1160,7 @@ live database was touched — and nothing was pushed to Neon.
 |---|---|---|
 | Schema compiles | `tsc --noEmit` with the §4 schema in `src/db/` | Passed, exit 0 |
 | Schema produces valid DDL | `drizzle-kit generate` into a scratch dir | 5 tables, 8 FKs, 7 indexes, correct `ON DELETE` behaviour |
-| `.pick()` blocks privilege escalation | Parsed a payload with `status: "cleared"`, `riskLevel: "high"`, `assignedTeamId`, `resolvedAt` injected | All four silently stripped; only the 5 citizen fields survived |
+| `.pick()` blocks privilege escalation | Parsed a payload with `status: "cleared"`, `riskLevel: "high"`, `assignedTeamId`, `resolvedAt` injected | All four silently stripped; only the citizen fields survived. *Re-check after the §5b change: `reporterId` is no longer picked either, so the surviving set is 4 fields, and `createReport` supplies `reporterId` from the session.* |
 | Enum messages are user-facing | Parsed `siteType: "nonsense"` | `"Choose what kind of site this is"`, not Zod's default |
 | Area risk query builds | `.toSQL()` on the §8 statement | Valid `count(...) filter (where ...)` + `left join` + `group by` |
 | Team workload query builds | `.toSQL()` | Valid |
@@ -1028,6 +1175,19 @@ bare `text` column with no constraint. §10 now states the real trade-off.
 
 All scratch files were deleted; the repo is unchanged apart from this document.
 
+**Added later, and verified live** (not part of the run above):
+
+| Check | Method | Result |
+|---|---|---|
+| Blob store exists and is public | `vercel blob get-store` | `denguewatch-photos`, `iad1`, Access: Public, linked to the project |
+| Upload path works end to end | `put()` → `fetch(blob.url)` → `list()` → `del()` via `tsx` | `200 image/png` from the CDN; store left empty |
+| `bodySizeLimit` key is current | `node_modules/next/dist/docs/…/serverActions.md` | `experimental.serverActions.bodySizeLimit`, 1MB default — unchanged in 16.3.4 |
+| `remotePatterns` wildcard | `node_modules/next/dist/docs/…/image.md` | `*` = one subdomain, `**` = many at the start. `*` is correct for the store host |
+| Nothing regressed | `npm run verify` | typecheck + lint + build all pass |
+
+Sections 5b (authentication) and the §7 `revalidatePath` correction are **specs,
+not verified code** — they have not been run.
+
 ---
 
 ## 14. Demo script (2 minutes)
@@ -1038,11 +1198,12 @@ there — the SSO limitation is settled; the video is the deliverable).
 - **0:00–0:15** — "Dengue kills people in Sri Lanka every year, and the people
   who spot breeding sites first aren't the people who can clear them.
   DengueWatch connects those two."
-- **0:15–0:45** — *Create.* As a citizen: report a blocked drain in Narahenpita,
-  **upload a photo from the device**, submit. Show it appear in the public list
-  with its thumbnail.
-- **0:45–1:25** — *Update, across two roles.* Switch to an officer: open the
-  report, assign **high** risk, dispatch **Fogging Unit A**. Switch to that crew:
+- **0:15–0:45** — *Create.* **Register a citizen account live** — it is eight
+  seconds and it proves the accounts are real. Then report a blocked drain in
+  Narahenpita, **upload a photo from the device**, submit. Show it appear in the
+  public list with its thumbnail.
+- **0:45–1:25** — *Update, across two roles.* Log in as an officer: open the
+  report, assign **high** risk, dispatch **Fogging Unit A**. Log in as that crew:
   the job is waiting in `/team`; clear it with "fogged". Open the detail page and
   show the **timeline** — the whole decision trail, with names, in one view.
 - **1:25–1:45** — *Calculate.* Dashboard: Narahenpita is a **Danger zone** with 5
@@ -1051,6 +1212,7 @@ there — the SSO limitation is settled; the video is the deliverable).
   rather than a pile of complaints.
 - **1:45–2:00** — Stack in one line, live URL on screen.
 
-Two things to say out loud, because they show judgment rather than gaps: the role
-picker stands in for real PHI authentication, and the risk score is a
-deliberately simple, explainable formula rather than a black box.
+Two things to say out loud, because they show judgment rather than gaps:
+staff accounts are provisioned rather than self-registered and route-level
+authorisation is the next thing a real PHI console would add, and the risk score
+is a deliberately simple, explainable formula rather than a black box.
